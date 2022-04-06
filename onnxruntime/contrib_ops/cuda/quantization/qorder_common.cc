@@ -218,11 +218,11 @@ Status QOrdered_MatMul(cublasLtHandle_t cublasLt_handle, cudaStream_t stream, [[
     }
 
     ORT_RETURN_IF_ERROR(CreateLtMatrixLayout(desc_A, batchCount, k, m, CUDA_R_8I, CUBLASLT_ORDER_COL, CUBLAS_OP_N));  // for A'
-    ORT_RETURN_IF_ERROR(CreateLtMatrixLayout(desc_B, batchB, n, k, CUDA_R_8I, CUBLASLT_ORDER_COL, CUBLAS_OP_T)); // For B'
+    ORT_RETURN_IF_ERROR(CreateLtMatrixLayout(desc_B, batchB, n, k, CUDA_R_8I, CUBLASLT_ORDER_COL, CUBLAS_OP_T));      // For B'
     CUBLAS_RETURN_IF_ERROR(cublasLtMatrixLayoutSetAttribute(desc_B, CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT, &batchCount, sizeof(batchCount)));
-    ORT_RETURN_IF_ERROR(CreateLtMatrixLayout(desc_D, batchCount, n, m, CUDA_R_8I, CUBLASLT_ORDER_COL, CUBLAS_OP_N)); // For D'
+    ORT_RETURN_IF_ERROR(CreateLtMatrixLayout(desc_D, batchCount, n, m, CUDA_R_8I, CUBLASLT_ORDER_COL, CUBLAS_OP_N));  // For D'
     if (C != nullptr) {
-      ORT_RETURN_IF_ERROR(CreateLtMatrixLayout(desc_C, batchC, n, m, CUDA_R_8I, CUBLASLT_ORDER_COL, CUBLAS_OP_N)); // For C'
+      ORT_RETURN_IF_ERROR(CreateLtMatrixLayout(desc_C, batchC, n, m, CUDA_R_8I, CUBLASLT_ORDER_COL, CUBLAS_OP_N));  // For C'
       CUBLAS_RETURN_IF_ERROR(cublasLtMatrixLayoutSetAttribute(desc_C, CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT, &batchCount, sizeof(batchCount)));
     }
   }
@@ -354,16 +354,17 @@ static Status CheckTensorOrder(const Tensor& input_tensor, cublasLtOrder_t input
 QuantizeWithOrder::QuantizeWithOrder(const OpKernelInfo& info) : CudaKernel(info) {
   order_input_ = GetCublasLtOrderAttr(info, "order_input");
   order_output_ = GetCublasLtOrderAttr(info, "order_output");
-  ORT_ENFORCE(order_input_ == CUBLASLT_ORDER_ROW, "Only CUBLASLT_ORDER_ROW is supported for order_input");
-  ORT_ENFORCE(order_output_ == CUBLASLT_ORDER_COL32 || order_output_ == CUBLASLT_ORDER_COL4_4R2_8C || order_output_ == CUBLASLT_ORDER_COL32_2R_4R4,
-              "Only CUBLASLT_ORDER_COL32, CUBLASLT_ORDER_COL4_4R2_8C, CUBLASLT_ORDER_COL32_2R_4R4 are supported for order_output");
+  ORT_ENFORCE(order_input_ == CUBLASLT_ORDER_ROW,
+              "Only CUBLASLT_ORDER_ROW is supported for order_input");
 }
 
 DequantizeWithOrder::DequantizeWithOrder(const OpKernelInfo& info) : CudaKernel(info) {
   order_input_ = GetCublasLtOrderAttr(info, "order_input");
   order_output_ = GetCublasLtOrderAttr(info, "order_output");
-  ORT_ENFORCE(order_input_ == CUBLASLT_ORDER_COL32, "Only CUBLASLT_ORDER_COL32 is supported for order_input");
-  ORT_ENFORCE(order_output_ == CUBLASLT_ORDER_ROW, "Only CUBLASLT_ORDER_ROW are supported for order_output");
+  ORT_ENFORCE(order_output_ == CUBLASLT_ORDER_ROW,
+              "Only CUBLASLT_ORDER_ROW are supported for order_output");
+  ORT_ENFORCE(order_input_ == CUBLASLT_ORDER_COL32 || order_input_ == CUBLASLT_ORDER_ROW,
+              "Only CUBLASLT_ORDER_COL32 or CUBLASLT_ORDER_ROW is supported for order_input");
 }
 
 QOrderedMatMul::QOrderedMatMul(const OpKernelInfo& info) : CudaKernel(info) {
@@ -508,10 +509,10 @@ Status QOrderedMatMul::ComputeInternal(OpKernelContext* context) const {
   const float alpha = *scaleA * *scaleB / *scaleY;
   const float beta = *scaleC / *scaleY;
   ORT_RETURN_IF_ERROR(QOrdered_MatMul(cublasLt, stream, device_prop,
-                                        (int)batchA, rowsA, colsB, colsA,
-                                        &alpha, tensor_A.Data<int8_t>(), tensor_B.Data<int8_t>(), batchB,
-                                        bias, &beta, C, batchC,
-                                        tensor_Y->MutableData<int8_t>(), (cublasLtOrder_t)order_B_));
+                                      (int)batchA, rowsA, colsB, colsA,
+                                      &alpha, tensor_A.Data<int8_t>(), tensor_B.Data<int8_t>(), batchB,
+                                      bias, &beta, C, batchC,
+                                      tensor_Y->MutableData<int8_t>(), (cublasLtOrder_t)order_B_));
 
   LOCATE_ERROR_IF_ENABLED_USING_CUDA_SYNC();
   return Status::OK();

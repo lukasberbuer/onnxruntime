@@ -167,28 +167,62 @@ static void RunQOrdered_Quantize_Test(
   test_q.AddAttribute("order_output", (int64_t)order_q);
   test_q.AddInput<T>("input", shape, fvec);
   test_q.AddInput<T>("scale_input", {}, {scale});
-  test_q.AddOutput("output", shape, qvec);
+  test_q.AddOutput("output", shape, qvec, false, 0.0f, 1.0f);
   test_q.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
 
-TEST(QOrderedTest, FP32_Quantize_COL32) {
-  std::vector<int64_t> shape = {1, 5, 32 * 2};
-  float scale = 1.0f;
+TEST(QOrderedTest, FP32_Quantize_COL) {
+  std::vector<int64_t> shape = {3, 5, 32 * 2};
+  float scale = 2.0f;
   std::vector<float> fvec = GenData<float>(shape, scale);
-  RunQOrdered_Quantize_Test(fvec, shape, ORDER_COL32, scale);
+  RunQOrdered_Quantize_Test(fvec, shape, ORDER_COL, scale);
 }
 
-TEST(QOrderedTest, FP16_Quantize_COL32) {
-  std::vector<int64_t> shape = {1, 5, 32 * 2};
-  MLFloat16 scale = MLFloat16(1.0f);
-  std::vector<MLFloat16> fvec = GenData<MLFloat16>(shape, scale);
+TEST(QOrderedTest, FP32_Quantize_ROW) {
+  std::vector<int64_t> shape = {3, 5, 32 * 2};
+  float scale = 2.0f;
+  std::vector<float> fvec = GenData<float>(shape, scale);
+  RunQOrdered_Quantize_Test(fvec, shape, ORDER_ROW, scale);
+}
+
+TEST(QOrderedTest, FP32_Quantize_COL32) {
+  std::vector<int64_t> shape = {3, 5, 32 * 2};
+  float scale = 2.0f;
+  std::vector<float> fvec = GenData<float>(shape, scale);
   RunQOrdered_Quantize_Test(fvec, shape, ORDER_COL32, scale);
 }
 
 TEST(QOrderedTest, FP32_Quantize_COL4_4R2_8C) {
-  std::vector<int64_t> shape = {1, 8 * 3, 32 * 2};
-  float scale(1.0f);
+  std::vector<int64_t> shape = {3, 8 * 3, 32 * 2};
+  float scale(2.0f);
   std::vector<float> fvec = GenData<float>(shape, scale);
+  RunQOrdered_Quantize_Test(fvec, shape, ORDER_COL4_4R2_8C, scale);
+}
+
+TEST(QOrderedTest, FP16_Quantize_COL) {
+  std::vector<int64_t> shape = {3, 5, 32 * 2};
+  MLFloat16 scale = MLFloat16(2.0f);
+  std::vector<MLFloat16> fvec = GenData<MLFloat16>(shape, scale);
+  RunQOrdered_Quantize_Test(fvec, shape, ORDER_COL, scale);
+}
+TEST(QOrderedTest, FP16_Quantize_ROW) {
+  std::vector<int64_t> shape = {3, 5, 32 * 2};
+  MLFloat16 scale = MLFloat16(2.0f);
+  std::vector<MLFloat16> fvec = GenData<MLFloat16>(shape, scale);
+  RunQOrdered_Quantize_Test(fvec, shape, ORDER_ROW, scale);
+}
+
+TEST(QOrderedTest, FP16_Quantize_COL32) {
+  std::vector<int64_t> shape = {3, 5, 32 * 2};
+  MLFloat16 scale = MLFloat16(2.0f);
+  std::vector<MLFloat16> fvec = GenData<MLFloat16>(shape, scale);
+  RunQOrdered_Quantize_Test(fvec, shape, ORDER_COL32, scale);
+}
+
+TEST(QOrderedTest, FP16_Quantize_COL4_4R2_8C) {
+  std::vector<int64_t> shape = {3, 8 * 3, 32 * 2};
+  MLFloat16 scale = MLFloat16(2.0f);
+  std::vector<MLFloat16> fvec = GenData<MLFloat16>(shape, scale);
   RunQOrdered_Quantize_Test(fvec, shape, ORDER_COL4_4R2_8C, scale);
 }
 
@@ -212,20 +246,33 @@ static void RunQOrdered_Dequantize_Test(
   test_dq.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
 
-// Dequantize only work for ORDER_COL32 input
+// Dequantize only work for ORDER_COL32 and ORDER_ROW input
 TEST(QOrderedTest, FP32_Dequantize_COL32) {
-  std::vector<int64_t> shape = {1, 5, 32 * 2};
-  float scale = 1.0f;
+  std::vector<int64_t> shape = {3, 5, 32 * 2};
+  float scale = 2.0f;
   std::vector<int8_t> qvec = GenData<int8_t>(shape, 1.0f);
   RunQOrdered_Dequantize_Test(qvec, shape, ORDER_COL32, scale);
 }
 
-// Dequantize only work for ORDER_COL32 input
+TEST(QOrderedTest, FP32_Dequantize_ROW) {
+  std::vector<int64_t> shape = {3, 5, 32 * 2};
+  float scale = 2.0f;
+  std::vector<int8_t> qvec = GenData<int8_t>(shape, 1.0f);
+  RunQOrdered_Dequantize_Test(qvec, shape, ORDER_ROW, scale);
+}
+
 TEST(QOrderedTest, FP16_Dequantize_COL32) {
-  std::vector<int64_t> shape = {1, 5, 32 * 2};
-  MLFloat16 scale(1.0f);
+  std::vector<int64_t> shape = {3, 5, 32 * 2};
+  MLFloat16 scale(2.0f);
   std::vector<int8_t> qvec = GenData<int8_t>(shape, 1.0f);
   RunQOrdered_Dequantize_Test(qvec, shape, ORDER_COL32, scale);
+}
+
+TEST(QOrderedTest, FP16_Dequantize_ROW) {
+  std::vector<int64_t> shape = {3, 5, 32 * 2};
+  MLFloat16 scale(2.0f);
+  std::vector<int8_t> qvec = GenData<int8_t>(shape, 1.0f);
+  RunQOrdered_Dequantize_Test(qvec, shape, ORDER_ROW, scale);
 }
 
 static void RunQOrdered_MatMul_Test(
