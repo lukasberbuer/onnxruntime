@@ -235,22 +235,26 @@ static void RunQOrdered_MatMul_Test(
     OrderCublasLt order_weight,
     float scaleA, float scaleB, float scaleC, float scaleY,
     bool add_bias = false, bool broadcast_c_batch = false) {
+  order_weight = ORDER_COL;
   int64_t nY = std::accumulate(shapeY.begin(), shapeY.end(), int64_t{1LL}, std::multiplies<int64_t>());
   std::vector<int8_t> vecA = GenData<int8_t>(shapeA, 1.0f);
   std::vector<int8_t> vecB = GenData<int8_t>(shapeB, 1.0f);
   std::vector<int8_t> vecY(nY);
 
+  OrderCublasLt real_order_A = (order_weight == ORDER_COL ? ORDER_ROW : ORDER_COL32);
+  OrderCublasLt real_order_w = (order_weight == ORDER_COL ? ORDER_ROW : order_weight);
+		
   int64_t colsA = 0, rowsA = 0, batchA = 0;
   BatchRowColFromShape(shapeA, batchA, rowsA, colsA);
-  OrderedIndex indexerA(ORDER_COL32, rowsA, colsA);
+  OrderedIndex indexerA(real_order_A, rowsA, colsA);
 
   int64_t colsB = 0, rowsB = 0, batchB = 0;
   BatchRowColFromShape(shapeB, batchB, rowsB, colsB);
-  OrderedIndex indexerB(order_weight, colsB, rowsB);  // B need Transpose
+  OrderedIndex indexerB(real_order_w, colsB, rowsB);  // B need Transpose
 
   int64_t colsY = 0, rowsY = 0, batchY = 0;
   BatchRowColFromShape(shapeY, batchY, rowsY, colsY);
-  OrderedIndex indexerY(ORDER_COL32, rowsY, colsY);
+  OrderedIndex indexerY(real_order_A, rowsY, colsY);
 
   std::vector<int64_t> shapeBias = {colsY};
   std::vector<float> vecBias;
@@ -299,9 +303,14 @@ static void RunQOrdered_MatMul_Test(
   execution_providers.push_back(DefaultCudaExecutionProvider());
 
   OpTester test_dq("QOrderedMatMul", 1, onnxruntime::kMSDomain);
-  test_dq.AddAttribute("order_A", (int64_t)ORDER_COL32);
   test_dq.AddAttribute("order_B", (int64_t)order_weight);
-  test_dq.AddAttribute("order_Y", (int64_t)ORDER_COL32);
+  if (order_weight != ORDER_ROW) {
+    test_dq.AddAttribute("order_A", (int64_t)ORDER_COL32);
+    test_dq.AddAttribute("order_Y", (int64_t)ORDER_COL32);
+  } else {
+    test_dq.AddAttribute("order_A", (int64_t)ORDER_COL);
+    test_dq.AddAttribute("order_Y", (int64_t)ORDER_COL);
+  }
   test_dq.AddInput<int8_t>("A", shapeA, vecA);
   test_dq.AddInput<float>("scale_A", {}, {scaleA});
   test_dq.AddInput<int8_t>("B", shapeB, vecB);

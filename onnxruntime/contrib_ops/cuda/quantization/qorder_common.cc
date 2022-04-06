@@ -145,9 +145,15 @@ void CublasLtMMAlgoMap::GetAlgo(cublasLtHandle_t cublasLt_handle, cublasLtMatmul
     cublasLtMatMulInt8SetupAlgo(cublasLt_handle, algo, algo_info.algoId, algo_info.swizzle, algo_info.customOption,
                                 algo_info.tile, algo_info.splitK_val, algo_info.reductionScheme, algo_info.stages);
   } else {
-    int algoId = (order_weight == CUBLASLT_ORDER_COL4_4R2_8C) ? 6 : 7 /* CUBLASLT_ORDER_COL32_2R_4R4 */;
-    int stages = (order_weight == CUBLASLT_ORDER_COL4_4R2_8C) ? 13 : 15 /* CUBLASLT_ORDER_COL32_2R_4R4 */;
-    cublasLtMatMulInt8SetupAlgo(cublasLt_handle, algo, algoId, 0, 0, 20, 0, 0, stages);
+    if (order_weight == CUBLASLT_ORDER_COL) {
+      int algoId = 21;
+      int stages = 0;
+      cublasLtMatMulInt8SetupAlgo(cublasLt_handle, algo, algoId, 0, 0, 20, 0, 0, stages);
+    } else {
+      int algoId = (order_weight == CUBLASLT_ORDER_COL4_4R2_8C) ? 6 : 7 /* CUBLASLT_ORDER_COL32_2R_4R4 */;
+      int stages = (order_weight == CUBLASLT_ORDER_COL4_4R2_8C) ? 13 : 15 /* CUBLASLT_ORDER_COL32_2R_4R4 */;
+      cublasLtMatMulInt8SetupAlgo(cublasLt_handle, algo, algoId, 0, 0, 20, 0, 0, stages);
+    }
   }
 }
 
@@ -269,9 +275,7 @@ Status QOrdered_MatMul_T(cublasLtHandle_t cublasLt_handle, cudaStream_t stream, 
     ORT_RETURN_IF_ERROR(CreateLtMatrixLayout(desc_C, isSingleBatchC ? 1 : batchCount, n, m, CUDA_R_8I, CUBLASLT_ORDER_COL, CUBLAS_OP_N));
     CUBLAS_RETURN_IF_ERROR(cublasLtMatrixLayoutSetAttribute(desc_C, CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT, &batchCount, sizeof(batchCount)));
   } else {
-    ORT_RETURN_IF_ERROR(CreateLtMatrixLayout(desc_C, batchCount, n, m, CUDA_R_8I, CUBLASLT_ORDER_COL, CUBLAS_OP_N));
     beta = &beta_zero;
-    C = D;
   }
 
   // get algo
@@ -279,7 +283,7 @@ Status QOrdered_MatMul_T(cublasLtHandle_t cublasLt_handle, cudaStream_t stream, 
   CublasLtMMAlgoMap::instance().GetAlgo(cublasLt_handle, algo, device_prop, batchCount, m, n, k, order_weight, CUBLASLT_ORDER_COL);
   CUBLAS_RETURN_IF_ERROR(cublasLtMatmul(cublasLt_handle, matmul_desc,
                                         alpha, B, desc_B, A, desc_A,
-                                        beta, C, desc_C, D, desc_D,
+                                        beta, C == nullptr ? D : C, C == nullptr ? desc_D : desc_C, D, desc_D,
                                         &algo, nullptr, 0,  // algo, workspace, workspace_size
                                         stream));
   return Status::OK();
