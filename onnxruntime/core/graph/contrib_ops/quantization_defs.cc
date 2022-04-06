@@ -1268,7 +1268,7 @@ TODO: Support them if needed in the future.
       .AllowUncheckedAttributes()
       .Input(0, "X", "Input data tensor from the previous layer.", "Q")
       .Input(1, "scale_X", "scale of the quantized X", "S")
-      .Input(2, "scale", "Scale tensor.", "F")
+      .Input(2, "scale", "Scale tensor, i.e., gamma vector.", "F")
       .Input(3, "B", "Bias tensor.", "F", OpSchema::Optional)
       .Input(4, "scale_Y", "scale of the quantized X", "S")
       .Output(0, "Y", "Output data tensor.", "Q")
