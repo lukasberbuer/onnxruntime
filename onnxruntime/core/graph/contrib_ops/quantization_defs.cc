@@ -1143,8 +1143,18 @@ If mask is provided, mask index (that is position of first 0 in mask, or number 
         updateOutputShape(ctx, 0, input_shape);
       }));
 
+  constexpr const char* QOrderedMatMul_ver1_doc = R"DOC(
+Quantize MatMul with order. Two type of order combination supported:
+  *) When order_B is ORDER_COL, order_A must bu ORDER_ROW, MatMul will be implemented using B' * A' + bias + C' => D'.
+     bias is vector of {#cols of D}, C' should be batch 1. B' could be of batch 1. 
+     Note B is reorder to ORDER_COL, or Transposed. Not Transposed first and then Reordered here.
+  *) When order_B is specify ORDER_COL4_4R2_8C or ORDER_COL32_2R_4R4, orderA must be ORDER_COL32. MatMul will be implemented using alpha(A * B) + beta * C => D.
+     bias is not supported here. B in fact is transposed first then reordered into ORDER_COL4_4R2_8C or ORDER_COL32_2R_4R4 here.
+order_Y and order_C will be same as order_A.
+)DOC";
+
   ONNX_MS_OPERATOR_SET_SCHEMA(QOrderedMatMul, 1, OpSchema()
-      .SetDoc(R"DOC(Quantize MatMul with order.)DOC")
+      .SetDoc(QOrderedMatMul_ver1_doc)
       .Attr("order_A", "cublasLt order of matrix A", AttributeProto::INT)
       .Attr("order_B", "cublasLt order of matrix B", AttributeProto::INT)
       .Attr("order_Y", "cublasLt order of matrix Y and optional matrix C", AttributeProto::INT)
