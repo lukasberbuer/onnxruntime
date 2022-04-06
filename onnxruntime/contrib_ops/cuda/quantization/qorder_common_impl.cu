@@ -409,16 +409,16 @@ template void QOrderDequantize<__half>(cudaStream_t stream, const cudaDeviceProp
 
 /************************************************************************
  * QOrdered Layernorm with compute type fp16:
- *   - input is int8 with order COL32
+ *   - input is int8 with order COL32 or ROW
  ************************************************************************/
 
 static constexpr unsigned QORDER_LAYERNORM_ROWS_PER_BLOCK = 8;  // 4, 8, 16, ...
 // block_size = (32, QORDER_LAYERNORM_ROWS_PER_BLOCK, 1)
 // grid_size = ((rows + QORDER_LAYERNORM_ROWS_PER_BLOCK - 1) / QORDER_LAYERNORM_ROWS_PER_BLOCK, batch, 1)
 __global__ void
-QOrderLayerNormKernel(const int8_t* __restrict__ src, const float src_scale, int8_t* __restrict__ dst, const float dst_scale,
-                      const __half* __restrict__ gamma, const __half* __restrict__ beta, const float epsilon,
-                      const unsigned rows, const unsigned cols) {
+QOrderLayerNormCol32Kernel(const int8_t* __restrict__ src, const float src_scale, int8_t* __restrict__ dst, const float dst_scale,
+                           const __half* __restrict__ gamma, const __half* __restrict__ beta, const float epsilon,
+                           const unsigned rows, const unsigned cols) {
   int32_t sum = 0;
   int32_t square_sum = 0;
   unsigned r = blockIdx.x * QORDER_LAYERNORM_ROWS_PER_BLOCK + threadIdx.y;
@@ -457,13 +457,59 @@ QOrderLayerNormKernel(const int8_t* __restrict__ src, const float src_scale, int
   }
 }
 
-void QOrderLayerNorm(cudaStream_t stream, const cudaDeviceProp& /*device_prop*/,
+// block_size = (32, QORDER_LAYERNORM_ROWS_PER_BLOCK, 1)
+// grid_size = ((rows + QORDER_LAYERNORM_ROWS_PER_BLOCK - 1) / QORDER_LAYERNORM_ROWS_PER_BLOCK, batch, 1)
+__global__ void
+QOrderLayerNormRowKernel(const int8_t* __restrict__ src, const float src_scale, int8_t* __restrict__ dst, const float dst_scale,
+                           const __half* __restrict__ gamma, const __half* __restrict__ beta, const float epsilon,
+                           const unsigned rows, const unsigned cols) {
+  int32_t sum = 0;
+  int32_t square_sum = 0;
+  unsigned r = blockIdx.x * QORDER_LAYERNORM_ROWS_PER_BLOCK + threadIdx.y;
+  if (rows <= r) return;
+
+  const size_t batch_row_index = (size_t)blockIdx.y * (rows * cols) + r * cols;
+  src += batch_row_index;
+  dst += batch_row_index;
+  for (unsigned c = threadIdx.x << 2;  c < cols; c += 128) {
+    char4 ch4 = __ldg((const char4*)(src + c));
+    sum += ((short)ch4.x + (short)ch4.y + (short)ch4.z + (short)ch4.w);
+    square_sum = __dp4a(ch4, ch4, square_sum);
+  }
+
+  sum = WarpReduceSum<int32_t>(sum);
+  square_sum = WarpReduceSum<int32_t>(square_sum);
+
+  const float mean = (src_scale * sum / cols);
+  const float rvar = rsqrtf(src_scale * src_scale * ((float)square_sum - ((float)sum * sum / cols)) / cols + epsilon);
+  const __half2 mean2 = __float2half2_rn(mean);
+  const __half2 var2 = __float2half2_rn(rvar);
+  const __half2 src_scale2 = __float2half2_rn(src_scale);
+  const __half2 dst_rscale2 = __float2half2_rn(1.0f / dst_scale);
+  const __half4 zero4 = {__float2half2_rn(0.0f), __float2half2_rn(0.0f)};
+
+  for (unsigned c = threadIdx.x << 2; c < cols; c += 128) {
+    char4 ch4 = __ldg((const char4*)(src + c));
+    __half4 dqval4 = deqantize_char4_half4(ch4, src_scale2);
+    const __half4 g4 = *((const __half4*)(gamma + c));
+    const __half4 b4 = (beta == nullptr) ? zero4 : *((const __half4*)(beta + c));
+    dqval4.xy = __hfma2(__hmul2(__hsub2(dqval4.xy, mean2), var2), g4.xy, b4.xy);
+    dqval4.zw = __hfma2(__hmul2(__hsub2(dqval4.zw, mean2), var2), g4.zw, b4.zw);
+    *(char4*)(dst + c) = quantize_half4_char4(dqval4, dst_rscale2);
+  }
+}
+
+void QOrderLayerNorm(cudaStream_t stream, const cudaDeviceProp& /*device_prop*/, cublasLtOrder_t order,
                      const int8_t* src, const float src_scale, int8_t* dst, const float dst_scale,
                      const __half* gamma, const __half* beta, const float epsilon,
                      const unsigned batch, const unsigned rows, const unsigned cols) {
   dim3 threads(32, QORDER_LAYERNORM_ROWS_PER_BLOCK, 1);
   dim3 blocks((unsigned)(rows + QORDER_LAYERNORM_ROWS_PER_BLOCK - 1) / QORDER_LAYERNORM_ROWS_PER_BLOCK, (unsigned)batch, 1);
-  QOrderLayerNormKernel<<<blocks, threads, 0, stream>>>(src, src_scale, dst, dst_scale, gamma, beta, epsilon, rows, cols);
+  if (order == CUBLASLT_ORDER_COL32) {
+    QOrderLayerNormCol32Kernel<<<blocks, threads, 0, stream>>>(src, src_scale, dst, dst_scale, gamma, beta, epsilon, rows, cols);
+  } else { // order == CUBLASLT_ORDER_ROW
+    QOrderLayerNormRowKernel<<<blocks, threads, 0, stream>>>(src, src_scale, dst, dst_scale, gamma, beta, epsilon, rows, cols);
+  }
 }
 
 // source matrix block 32 x 32, each thread handle 4 int8_t items,

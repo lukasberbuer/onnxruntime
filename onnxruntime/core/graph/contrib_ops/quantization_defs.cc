@@ -1264,7 +1264,7 @@ TODO: Support them if needed in the future.
             "The epsilon value to use to avoid division by zero.",
             AttributeProto::FLOAT, 1e-5f)
       .Attr("order_X", "cublasLt order of input X", AttributeProto::INT)
-      .Attr("order_Y", "cublasLt order of matrix Y", AttributeProto::INT)
+      .Attr("order_Y", "cublasLt order of matrix Y, must be same as order_X. ORDER_ROW or ORDER_COL32 supported", AttributeProto::INT)
       .AllowUncheckedAttributes()
       .Input(0, "X", "Input data tensor from the previous layer.", "Q")
       .Input(1, "scale_X", "scale of the quantized X", "S")
@@ -1292,7 +1292,7 @@ TODO: Support them if needed in the future.
   ONNX_MS_OPERATOR_SET_SCHEMA(QOrderedGelu, 1, OpSchema()
       .SetDoc(R"DOC(Ordered Quantize Gelu.)DOC")
       .Attr("order_X", "cublasLt order of input X", AttributeProto::INT)
-      .Attr("order_Y", "cublasLt order of output Y", AttributeProto::INT)
+      .Attr("order_Y", "cublasLt order of matrix Y, must be same as order_X. ORDER_ROW or ORDER_COL32 supported", AttributeProto::INT)
       .Input(0, "X", "N-dimensional input A", "Q")
       .Input(1, "scale_X", "scale of the input A", "S")
       .Input(2, "scale_Y", "scale of the output Y", "S")
